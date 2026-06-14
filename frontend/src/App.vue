@@ -28,11 +28,30 @@
 
       <!-- Document list -->
       <div class="flex-1 overflow-y-auto space-y-1">
-        <div v-for="d in store.documents" :key="d.id" @click="store.currentDoc = d"
+        <div v-for="d in store.documents" :key="d.id"
           class="bg-gray-800 rounded p-2 cursor-pointer text-sm"
           :class="store.currentDoc?.id === d.id ? 'ring-1 ring-amber-500' : ''">
-          {{ d.name }}
-          <div class="text-xs text-gray-500">{{ d.results.length }} 行识别</div>
+          <div v-if="editingDocId !== d.id" class="flex justify-between items-start">
+            <div @click="store.currentDoc = d" class="flex-1">
+              {{ d.name }}
+              <div class="text-xs text-gray-500">{{ d.results.length }} 行识别</div>
+            </div>
+            <button @click.stop="startRename(d)" class="text-gray-400 hover:text-amber-400 ml-2 text-xs px-1">
+              ✎
+            </button>
+          </div>
+          <div v-else class="space-y-1">
+            <input v-model="renameInput" ref="renameInputRef"
+              @keyup.enter="confirmRename(d.id)"
+              @keyup.escape="cancelRename"
+              @blur="confirmRename(d.id)"
+              class="w-full bg-gray-700 rounded px-2 py-1 text-sm"
+              placeholder="输入新名称" />
+            <div class="flex gap-1">
+              <button @click="confirmRename(d.id)" class="text-xs bg-amber-600 hover:bg-amber-500 px-2 py-0.5 rounded">确认</button>
+              <button @click="cancelRename" class="text-xs bg-gray-600 hover:bg-gray-500 px-2 py-0.5 rounded">取消</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -87,10 +106,39 @@
 </template>
 
 <script setup lang="ts">
+import { ref, nextTick } from 'vue'
 import { useOcrStore } from './store/ocr'
 import ImageCanvas from './components/ImageCanvas.vue'
+import type { Document } from './types'
 
 const store = useOcrStore()
+
+const editingDocId = ref<string | null>(null)
+const renameInput = ref('')
+const renameInputRef = ref<HTMLInputElement | null>(null)
+
+function startRename(doc: Document) {
+  editingDocId.value = doc.id
+  renameInput.value = doc.name
+  nextTick(() => {
+    renameInputRef.value?.focus()
+    renameInputRef.value?.select()
+  })
+}
+
+function confirmRename(docId: string) {
+  if (editingDocId.value !== docId) return
+  const newName = renameInput.value.trim()
+  if (newName) {
+    store.renameDocument(docId, newName)
+  }
+  cancelRename()
+}
+
+function cancelRename() {
+  editingDocId.value = null
+  renameInput.value = ''
+}
 
 function onUpload(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]

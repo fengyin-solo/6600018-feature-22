@@ -89,6 +89,13 @@ export const useOcrStore = defineStore('ocr', () => {
     )
   }
 
+  function renameDocument(docId: string, newName: string) {
+    const doc = documents.value.find(d => d.id === docId)
+    if (doc && newName.trim()) {
+      doc.name = newName.trim()
+    }
+  }
+
   function exportTEI(): string {
     if (!currentDoc.value) return ''
     let tei = '<?xml version="1.0" encoding="UTF-8"?>\n'
@@ -105,6 +112,6 @@ export const useOcrStore = defineStore('ocr', () => {
   return {
     documents, currentDoc, isLoading, searchQuery, searchResults,
     loadMockDocument, uploadAndOCR, addAnnotation, removeAnnotation,
-    convertVariant, searchInDocuments, exportTEI
+    convertVariant, searchInDocuments, renameDocument, exportTEI
   }
 })

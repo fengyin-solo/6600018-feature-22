@@ -1,6 +1,9 @@
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 import type { Document, OCRResult, Annotation } from '../types'
+
+const STORAGE_KEY = 'ocr-documents'
+const CURRENT_DOC_KEY = 'ocr-current-doc-id'
 
 export const useOcrStore = defineStore('ocr', () => {
   const documents = ref<Document[]>([])
@@ -9,7 +12,6 @@ export const useOcrStore = defineStore('ocr', () => {
   const searchQuery = ref('')
   const searchResults = ref<OCRResult[]>([])
 
-  // Mock data
   const MOCK_DOC: Document = {
     id: '1',
     name: '论语·学而篇',
@@ -33,9 +35,57 @@ export const useOcrStore = defineStore('ocr', () => {
     '風': '风', '雲': '云', '龍': '龙', '車': '车', '萬': '万', '見': '见',
   }
 
+  function saveToStorage() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(documents.value))
+      if (currentDoc.value) {
+        localStorage.setItem(CURRENT_DOC_KEY, currentDoc.value.id)
+      } else {
+        localStorage.removeItem(CURRENT_DOC_KEY)
+      }
+    } catch (e) {
+      console.warn('Failed to save documents to storage:', e)
+    }
+  }
+
+  function loadFromStorage() {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY)
+      if (saved) {
+        documents.value = JSON.parse(saved) as Document[]
+      }
+      const savedCurrentId = localStorage.getItem(CURRENT_DOC_KEY)
+      if (savedCurrentId && documents.value.length) {
+        currentDoc.value = documents.value.find(d => d.id === savedCurrentId) || documents.value[0]
+      }
+    } catch (e) {
+      console.warn('Failed to load documents from storage:', e)
+    }
+  }
+
+  function syncCurrentDoc(docId: string) {
+    if (currentDoc.value && currentDoc.value.id === docId) {
+      const updated = documents.value.find(d => d.id === docId)
+      if (updated) {
+        currentDoc.value = updated
+      }
+    }
+  }
+
+  loadFromStorage()
+
+  watch(documents, saveToStorage, { deep: true })
+  watch(currentDoc, (doc) => {
+    if (doc) {
+      localStorage.setItem(CURRENT_DOC_KEY, doc.id)
+    } else {
+      localStorage.removeItem(CURRENT_DOC_KEY)
+    }
+  })
+
   function loadMockDocument() {
-    documents.value = [MOCK_DOC]
-    currentDoc.value = MOCK_DOC
+    documents.value = [JSON.parse(JSON.stringify(MOCK_DOC))]
+    currentDoc.value = documents.value[0]
   }
 
   async function uploadAndOCR(file: File) {
@@ -58,7 +108,6 @@ export const useOcrStore = defineStore('ocr', () => {
         currentDoc.value = doc
       }
     } catch {
-      // Use mock data as fallback
       loadMockDocument()
     } finally {
       isLoading.value = false
@@ -71,11 +120,13 @@ export const useOcrStore = defineStore('ocr', () => {
       id: Date.now().toString(),
       type, bbox, label, content
     })
+    syncCurrentDoc(currentDoc.value.id)
   }
 
   function removeAnnotation(id: string) {
     if (!currentDoc.value) return
     currentDoc.value.annotations = currentDoc.value.annotations.filter(a => a.id !== id)
+    syncCurrentDoc(currentDoc.value.id)
   }
 
   function convertVariant(text: string): string {
@@ -90,9 +141,11 @@ export const useOcrStore = defineStore('ocr', () => {
   }
 
   function renameDocument(docId: string, newName: string) {
+    const trimmed = newName.trim()
     const doc = documents.value.find(d => d.id === docId)
-    if (doc && newName.trim()) {
-      doc.name = newName.trim()
+    if (doc && trimmed) {
+      doc.name = trimmed
+      syncCurrentDoc(docId)
     }
   }
 
